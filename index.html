@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<meta name="theme-color" content="#08010f" />
+<title>ARファッションチェック</title>
+<link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+P+One&family=Kosugi+Maru&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box}html,body{margin:0;padding:0;height:100%;overflow:hidden}
+body{font-family:"Kosugi Maru",system-ui,sans-serif;color:#fff;background:linear-gradient(180deg,#0a2540,#08010f);touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent}
+#app{display:flex;flex-direction:column;height:100dvh;padding:10px;gap:8px;max-width:480px;margin:0 auto;align-items:center}
+.title{font-family:"Mochiy Pop P One",sans-serif;font-size:20px;color:#a0e8ff;-webkit-text-stroke:2.5px #000;paint-order:stroke fill;text-shadow:3px 3px 0 #ff5fa2;margin:6px 0;text-align:center}
+.cam-wrap{flex:1;width:100%;max-width:380px;aspect-ratio:3/4;border-radius:18px;overflow:hidden;position:relative;background:#000;border:4px solid #a0e8ff;box-shadow:0 0 20px rgba(160,232,255,.4)}
+video,#snap{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.overlay{position:absolute;inset:0;pointer-events:none}
+.overlay div{position:absolute;font-size:60px;line-height:1;transform:translate(-50%,-50%);text-shadow:0 0 6px #000}
+.guide{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);width:55%;aspect-ratio:3/4;border:2px dashed rgba(255,255,255,.4);border-radius:50%;pointer-events:none}
+.guide.hide{display:none}
+.score{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.7);padding:6px 10px;border-radius:999px;font-family:"Mochiy Pop P One",sans-serif;font-size:14px;color:#ffe066;display:none}
+.score.show{display:block}
+.cmt{position:absolute;left:8px;right:8px;bottom:8px;background:rgba(0,0,0,.85);padding:8px 12px;border-radius:10px;text-align:center;font-size:12px;display:none;line-height:1.5}
+.cmt.show{display:block}
+.style-row{display:flex;gap:6px;overflow-x:auto;width:100%;padding:4px 0;scrollbar-width:none}
+.style-row::-webkit-scrollbar{display:none}
+.style-row button{flex:0 0 auto;background:rgba(255,255,255,.1);border:2px solid #a0e8ff;color:#fff;padding:8px 12px;font-family:"Mochiy Pop P One",sans-serif;font-size:11px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.style-row button.on{background:#a0e8ff;color:#000}
+.actions{display:flex;gap:8px;width:100%;justify-content:center;flex-wrap:wrap}
+.actions button{background:#a0e8ff;color:#000;border:3px solid #000;padding:10px 18px;font-family:"Mochiy Pop P One",sans-serif;font-size:13px;border-radius:999px;cursor:pointer;box-shadow:3px 3px 0 #000}
+.actions .pink{background:#ff5fa2;color:#fff}
+.actions button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #000}
+.actions button:disabled{opacity:.4}
+.note{font-size:9px;opacity:.65;text-align:center;line-height:1.4}
+.err{padding:10px;background:rgba(255,0,0,.2);border:2px solid #f55;border-radius:10px;font-size:12px;display:none}
+.err.show{display:block}
+</style>
+</head>
+<body>
+<div id="app">
+<h1 class="title">ARファッションチェック</h1>
+<div class="cam-wrap" id="wrap">
+  <video id="vid" autoplay playsinline muted></video>
+  <canvas id="snap" style="display:none"></canvas>
+  <div class="guide" id="guide"></div>
+  <div class="overlay" id="ov"></div>
+  <div class="score" id="score">— 点</div>
+  <div class="cmt" id="cmt">—</div>
+</div>
+<div class="style-row" id="styles"></div>
+<div class="actions">
+  <button id="btn-start">📷 起動</button>
+  <button id="btn-judge" disabled class="pink">⭐ 採点</button>
+  <button id="btn-save" disabled>📥 保存</button>
+</div>
+<div class="note">枠に顔を合わせてスタイルを選ぼう・送信なし</div>
+<div class="err" id="err"></div>
+</div>
+<script>
+(()=>{
+'use strict';
+// each style: list of {emoji,xPercent,yPercent,size}
+const STYLES=[
+{name:'🎩 紳士',items:[{e:'🎩',x:50,y:18,s:90},{e:'👓',x:50,y:42,s:60},{e:'👔',x:50,y:80,s:80}]},
+{name:'😎 イケイケ',items:[{e:'🕶',x:50,y:42,s:70},{e:'⛓',x:50,y:75,s:60}]},
+{name:'👑 王様',items:[{e:'👑',x:50,y:14,s:90},{e:'🧔',x:50,y:60,s:80}]},
+{name:'🌸 ガーリー',items:[{e:'🎀',x:30,y:18,s:60},{e:'💄',x:50,y:60,s:50},{e:'🌸',x:70,y:30,s:50}]},
+{name:'🥷 忍者',items:[{e:'🥷',x:50,y:40,s:120}]},
+{name:'🤡 ふざけ',items:[{e:'🤡',x:50,y:40,s:110},{e:'🎈',x:25,y:25,s:60}]},
+{name:'🦸 ヒーロー',items:[{e:'🦸',x:50,y:40,s:120},{e:'⚡',x:75,y:30,s:60}]},
+{name:'🐸 ふつう',items:[{e:'😀',x:50,y:42,s:80}]}
+];
+const COMMENTS=[
+'おしゃれ偏差値高め！','ワンチャンモテる…？','謎のオーラある','ちょっと攻めすぎ',
+'ナチュラルが似合う','大物の風格','インスタ向き','個性は大事',
+'これは…アリ寄り','カオス、それも芸','時代の最先端','似合いすぎ注意'
+];
+const $=(id)=>document.getElementById(id);
+let stream=null,curStyle=0,score=null;
+const ov=$('ov'),styleRow=$('styles');
+function renderOverlay(){
+  while(ov.firstChild)ov.removeChild(ov.firstChild);
+  const st=STYLES[curStyle];
+  for(const it of st.items){
+    const d=document.createElement('div');d.textContent=it.e;
+    d.style.left=it.x+'%';d.style.top=it.y+'%';d.style.fontSize=it.s+'px';
+    ov.appendChild(d);
+  }
+}
+function renderStyleRow(){
+  while(styleRow.firstChild)styleRow.removeChild(styleRow.firstChild);
+  STYLES.forEach((s,i)=>{
+    const b=document.createElement('button');b.textContent=s.name;
+    if(i===curStyle)b.classList.add('on');
+    b.addEventListener('click',()=>{curStyle=i;renderStyleRow();renderOverlay()});
+    styleRow.appendChild(b);
+  });
+}
+async function startCam(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:480,height:640},audio:false});
+    $('vid').srcObject=stream;await $('vid').play();
+    $('btn-start').disabled=true;$('btn-start').textContent='✓ 起動済';
+    $('btn-judge').disabled=false;
+  }catch(e){$('err').textContent='カメラ起動失敗: '+e.message;$('err').classList.add('show')}
+}
+function judge(){
+  // pseudo random hash from frame
+  const v=$('vid'),snap=$('snap');
+  snap.width=v.videoWidth||320;snap.height=v.videoHeight||240;
+  const ctx=snap.getContext('2d');ctx.drawImage(v,0,0,snap.width,snap.height);
+  const d=ctx.getImageData(0,0,snap.width,snap.height).data;
+  let h=0x811c9dc5;for(let i=0;i<d.length;i+=64){h^=d[i];h=Math.imul(h,16777619)>>>0}
+  score=40+(h%61);
+  const cmt=COMMENTS[h%COMMENTS.length];
+  $('score').textContent=score+'点';$('score').classList.add('show');
+  $('cmt').textContent=cmt;$('cmt').classList.add('show');
+  $('guide').classList.add('hide');
+  $('btn-save').disabled=false;
+  fanfare();
+}
+let ac=null;const en=()=>{if(!ac)ac=new(window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();return ac};
+const beep=(f,d,t='triangle',g=.13)=>{const a=en();const o=a.createOscillator();const gn=a.createGain();o.type=t;o.frequency.value=f;gn.gain.value=g;gn.gain.exponentialRampToValueAtTime(.0001,a.currentTime+d);o.connect(gn).connect(a.destination);o.start();o.stop(a.currentTime+d)};
+const fanfare=()=>{[523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,.18),i*100))};
+function savePng(){
+  const v=$('vid'),snap=$('snap');
+  const W=snap.width||v.videoWidth||320,H=snap.height||v.videoHeight||240;
+  snap.width=W;snap.height=H;
+  const ctx=snap.getContext('2d');
+  ctx.save();ctx.translate(W,0);ctx.scale(-1,1);ctx.drawImage(v,0,0,W,H);ctx.restore();
+  const st=STYLES[curStyle];
+  for(const it of st.items){
+    ctx.font=Math.floor(it.s*W/380)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(it.e,it.x*W/100,it.y*H/100);
+  }
+  if(score!=null){
+    ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(W-110,8,100,36);
+    ctx.fillStyle='#ffe066';ctx.font='bold 22px sans-serif';ctx.textAlign='center';
+    ctx.fillText(score+'点',W-60,32);
+  }
+  snap.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='fashion.png';a.click()});
+}
+$('btn-start').addEventListener('click',()=>{en();startCam()});
+$('btn-judge').addEventListener('click',()=>{en();judge()});
+$('btn-save').addEventListener('click',savePng);
+renderStyleRow();renderOverlay();
+})();
+</script>
+</body>
+</html>
